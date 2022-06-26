@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: dex-login
+  name: dex-login
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dex-login
+  template:
+    metadata:
+      labels:
+        app: dex-login
+    spec:
+      serviceAccountName: dex-login
+      containers:
+        - image: docker.io/cuisongliu/dex-login
+          imagePullPolicy: Always
+          name: dex-login
+          command:
+            - /dex-login
+            - --issuer
+            - https://172.27.139.108:32000
+            - --redirect-uri
+            - http://172.27.139.108:32001/callback
+            - --debug
+            - --listen
+            - http://0.0.0.0:5555
+          ports:
+            - name: https
+              containerPort: 5555
+          volumeMounts:
+            - name: localtime
+              mountPath: /etc/localtime
+          readinessProbe:
+            failureThreshold: 3 #成功后检测最小连续故障次数
+            initialDelaySeconds: 0 #初始延迟(秒)
+            periodSeconds: 10 #检测的间隔时间
+            successThreshold: 1 #失败后检测最小连续成功次数
+            timeoutSeconds: 0 #超时时间(秒)
+            tcpSocket:
+              port: 5555
+      volumes:
+        - name: localtime
+          hostPath:
+            path: /etc/localtime
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dex-login
+  namespace: kube-system
+spec:
+  type: NodePort
+  ports:
+    - name: dex-login
+      port: 5555
+      protocol: TCP
+      targetPort: dex-login
+      nodePort: 32001
+  selector:
+    app: dex-login
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app: dex-login
+  name: dex-login
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dex-login
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: dex-login
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dex-login
+subjects:
+  - kind: ServiceAccount
+    name: dex-login
+    namespace: kube-system
